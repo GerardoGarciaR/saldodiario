@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Saldo Diario",
+    "slug": "saldo-diario",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}
