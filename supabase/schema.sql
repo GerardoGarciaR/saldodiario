@@ -112,3 +112,16 @@ create policy "movimientos_delete_own"
   for delete
   to authenticated
   using (auth.uid() = user_id);
+
+-- PERMISOS DE DATA API
+-- Los GRANT de PostgreSQL y las políticas RLS son capas distintas.
+-- authenticated puede operar las tablas; RLS decide qué filas son de cada usuario.
+grant usage on schema public to authenticated;
+
+grant select, insert, update, delete
+on table public.periodos_financieros
+ to authenticated;
+
+grant select, insert, update, delete
+on table public.movimientos_financieros
+ to authenticated;

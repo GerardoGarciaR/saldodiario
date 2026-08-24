@@ -10,50 +10,8 @@ import ZoomModal from './ZoomModal';
 import InlineNotice from './InlineNotice';
 import { colors } from '../theme';
 import { addDays, toISODate } from '../utils/dates';
+import { toNumber } from '../utils/money';
 import { clearFinanceError, createPeriod } from '../store/financeSlice';
-
-const parseCurrency = (value) => {
-  const normalized = String(value ?? '')
-    .replace(/[$,\s]/g, '')
-    .trim();
-
-  if (!normalized || normalized === '.') return 0;
-
-  const amount = Number(normalized);
-  return Number.isFinite(amount) ? amount : 0;
-};
-
-const formatCurrencyWhileTyping = (value) => {
-  const source = String(value ?? '')
-    .replace(/[$,\s]/g, '')
-    .replace(/[^\d.]/g, '');
-
-  if (!source) return '';
-
-  const dotIndex = source.indexOf('.');
-  let integerPart = dotIndex >= 0 ? source.slice(0, dotIndex) : source;
-  let decimalPart = dotIndex >= 0
-    ? source.slice(dotIndex + 1).replace(/\./g, '').slice(0, 2)
-    : '';
-
-  integerPart = integerPart.replace(/^0+(?=\d)/, '');
-  if (!integerPart) integerPart = '0';
-
-  const groupedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-  return `$${groupedInteger}${dotIndex >= 0 ? `.${decimalPart}` : ''}`;
-};
-
-const formatCurrencyFinal = (value) => {
-  if (!String(value ?? '').trim()) return '';
-
-  const amount = parseCurrency(value);
-
-  return `$${amount.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-};
 
 export default function NewPeriodModal({ visible, onClose }) {
   const dispatch = useDispatch();
@@ -87,7 +45,7 @@ export default function NewPeriodModal({ visible, onClose }) {
       setLocalError('Escribe el concepto del ingreso inicial.');
       return;
     }
-    const incomeAmount = parseCurrency(income);
+    const incomeAmount = toNumber(income);
 
     if (incomeAmount < 0) {
       setLocalError('El ingreso inicial no puede ser negativo.');
@@ -121,9 +79,7 @@ export default function NewPeriodModal({ visible, onClose }) {
         <MoneyInput
           label="Ingreso inicial"
           value={income}
-          onChangeText={(value) => setIncome(formatCurrencyWhileTyping(value))}
-          onBlur={() => setIncome((value) => formatCurrencyFinal(value))}
-          placeholder="$0.00"
+          onChangeText={setIncome}
         />
         <AppInput
           label="Concepto del ingreso"

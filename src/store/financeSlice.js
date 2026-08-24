@@ -10,27 +10,29 @@ export const loadFinanceData = createAsyncThunk(
       const userId = getUserId(getState());
       if (!userId) throw new Error('No hay una sesión activa.');
 
-      const [periodsResult, movementsResult] = await Promise.all([
-        supabase
-          .from('periodos_financieros')
-          .select('*')
-          .eq('user_id', userId)
-          .order('fecha_inicio', { ascending: false })
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('movimientos_financieros')
-          .select('*')
-          .eq('user_id', userId)
-          .order('fecha', { ascending: true })
-          .order('created_at', { ascending: true }),
-      ]);
+      // Cargamos primero los períodos. Si la consulta secundaria de movimientos
+      // falla (por ejemplo, por un GRANT pendiente), no ocultamos períodos que
+      // sí existen en Supabase. Esto evita que un F5 haga parecer que se perdieron.
+      const periodsResult = await supabase
+        .from('periodos_financieros')
+        .select('*')
+        .eq('user_id', userId)
+        .order('fecha_inicio', { ascending: false })
+        .order('created_at', { ascending: false });
 
       if (periodsResult.error) throw periodsResult.error;
-      if (movementsResult.error) throw movementsResult.error;
+
+      const movementsResult = await supabase
+        .from('movimientos_financieros')
+        .select('*')
+        .eq('user_id', userId)
+        .order('fecha', { ascending: true })
+        .order('created_at', { ascending: true });
 
       return {
         periods: periodsResult.data || [],
-        movements: movementsResult.data || [],
+        movements: movementsResult.error ? [] : (movementsResult.data || []),
+        warning: movementsResult.error?.message || null,
       };
     } catch (error) {
       return rejectWithValue(error.message || 'No fue posible cargar la información.');
@@ -163,6 +165,7 @@ const financeSlice = createSlice({
         state.loading = false;
         state.periods = action.payload.periods;
         state.movements = action.payload.movements;
+        state.error = action.payload.warning || null;
 
         const stillExists = state.periods.some((p) => p.id === state.selectedPeriodId);
         if (!stillExists) {
