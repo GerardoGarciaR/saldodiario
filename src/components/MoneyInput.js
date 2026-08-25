@@ -1,74 +1,77 @@
-import React, { useMemo, useState } from 'react';
-import { Platform } from 'react-native';
+import React, { useMemo } from 'react';
 import AppInput from './AppInput';
-import { formatMoneyInput, sanitizeMoneyInput } from '../utils/money';
+import { toNumber } from '../utils/money';
 
-function isCoarsePointerWeb() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+const MAX_CENT_DIGITS = 14;
 
-  try {
-    return window.matchMedia?.('(pointer: coarse)')?.matches === true;
-  } catch {
-    return false;
-  }
+function digitsToCanonicalMoney(digits) {
+  const cleanDigits = String(digits ?? '')
+    .replace(/\D/g, '')
+    .replace(/^0+(?=\d)/, '')
+    .slice(-MAX_CENT_DIGITS);
+
+  if (!cleanDigits) return '';
+
+  const padded = cleanDigits.padStart(3, '0');
+  const integerPart = padded.slice(0, -2).replace(/^0+(?=\d)/, '') || '0';
+  const decimals = padded.slice(-2);
+
+  return `${integerPart}.${decimals}`;
 }
 
-function formatMoneyWhileEditing(value) {
-  const raw = sanitizeMoneyInput(value);
-  if (!raw) return '';
+function formatCanonicalMoney(value) {
+  const amount = toNumber(value);
 
-  const hasDecimalPoint = raw.includes('.');
-  const [integerRaw = '0', decimalsRaw = ''] = raw.split('.');
-
-  const integer = integerRaw.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-  if (!hasDecimalPoint) return `$${integer}`;
-
-  return `$${integer}.${decimalsRaw.slice(0, 2)}`;
+  return `$${amount.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export default function MoneyInput({
   value,
   onChangeText,
-  onFocus,
-  onBlur,
   ...props
 }) {
-  const [focused, setFocused] = useState(false);
+  const displayValue = useMemo(
+    () => formatCanonicalMoney(value),
+    [value]
+  );
 
-  // Safari/Chrome en iPhone (React Native Web) no manejan de forma estable
-  // un TextInput controlado que además fuerza `selection` en cada render.
-  // En dispositivos táctiles dejamos que el cursor sea completamente nativo:
-  // durante la edición mostramos "$1,800" / "$1,800.5" y al salir "$1,800.00".
-  const mobileWeb = useMemo(() => isCoarsePointerWeb(), []);
+  const handleChangeText = (text) => {
+    /*
+     * Máscara tipo cajero automático:
+     *
+     *   tecla 1      -> $0.01
+     *   tecla 0      -> $0.10
+     *   tecla 0      -> $1.00
+     *   tecla 0      -> $10.00
+     *   tecla 0      -> $100.00
+     *   tecla 0      -> $1,000.00
+     *
+     * Para borrar ocurre lo mismo en sentido inverso:
+     *   $1,000.00 -> $100.00 -> $10.00 -> $1.00 -> $0.10 -> $0.01 -> $0.00
+     *
+     * No controlamos manualmente la posición del cursor. Esto evita el bloqueo
+     * que React Native Web/WebKit producía en Safari y Chrome de iPhone.
+     *
+     * Funciona tanto si el navegador entrega el texto completo ya formateado
+     * ("$1,000.000") como si entrega sólo lo recién escrito ("1000"):
+     * tomamos únicamente los dígitos y los interpretamos siempre como centavos.
+     */
+    const digits = String(text ?? '').replace(/\D/g, '');
+    const canonical = digitsToCanonicalMoney(digits);
 
-  const displayValue = useMemo(() => {
-    if (mobileWeb && focused) {
-      return formatMoneyWhileEditing(value);
-    }
-
-    return formatMoneyInput(value);
-  }, [value, focused, mobileWeb]);
-
-  const handleFocus = (event) => {
-    setFocused(true);
-    onFocus?.(event);
-  };
-
-  const handleBlur = (event) => {
-    setFocused(false);
-    onBlur?.(event);
+    onChangeText?.(canonical);
   };
 
   return (
     <AppInput
       {...props}
       value={displayValue}
-      onChangeText={(text) => onChangeText?.(sanitizeMoneyInput(text))}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      keyboardType="decimal-pad"
-      inputMode="decimal"
+      onChangeText={handleChangeText}
+      keyboardType="number-pad"
+      inputMode="numeric"
       placeholder="$0.00"
     />
   );
